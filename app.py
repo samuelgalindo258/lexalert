@@ -29,6 +29,16 @@ SECTORES_COLOMBIA = [
     "Otro",
 ]
 
+MODELOS_NO_CHAT = (
+    "whisper",
+    "orpheus",
+    "tts",
+    "audio",
+    "guard",
+    "safeguard",
+    "embed",
+)
+
 
 def extraer_json(texto: str) -> dict:
     limpio = texto.strip()
@@ -65,46 +75,55 @@ def construir_prompt(perfil: dict) -> str:
     )
 
 
-def obtener_modelo_groq(client: Groq) -> str:
+def listar_modelos_chat_groq(client: Groq) -> list[str]:
     modelos = client.models.list()
-    ids = [
-        getattr(m, "id", "")
-        for m in getattr(modelos, "data", [])
-        if getattr(m, "id", "")
-        and "whisper" not in getattr(m, "id", "").lower()
-        and "guard" not in getattr(m, "id", "").lower()
+    todos = [getattr(m, "id", "") for m in getattr(modelos, "data", []) if getattr(m, "id", "")]
+    candidatos_chat = [
+        mid
+        for mid in todos
+        if not any(bloqueado in mid.lower() for bloqueado in MODELOS_NO_CHAT)
     ]
+
     preferencias = [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
         "llama-4-scout-17b-16e-instruct",
+        "llama-4-maverick-17b-128e-instruct",
         "qwen/qwen3-32b",
+        "deepseek-r1-distill-llama-70b",
+        "gemma2-9b-it",
     ]
+
+    ordenados = []
     for pref in preferencias:
-        if pref in ids:
-            return pref
-    if ids:
-        return ids[0]
-    raise RuntimeError("No se encontraron modelos de chat disponibles en tu cuenta de Groq.")
+        if pref in candidatos_chat and pref not in ordenados:
+            ordenados.append(pref)
+    for mid in candidatos_chat:
+        if mid not in ordenados:
+            ordenados.append(mid)
+
+    if not ordenados:
+        raise RuntimeError(f"No hay modelos de texto disponibles en Groq. Modelos vistos: {todos}")
+    return ordenados[:5]
 
 
 def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) -> dict:
     client = genai.Client(
         api_key=api_key.strip(),
-        http_options=types.HttpOptions(timeout=60000),
+        http_options=types.HttpOptions(timeout=60),
     )
     prompt = construir_prompt(perfil)
     tools = [{"google_search": {}}] if usar_busqueda else None
 
     ultimo_error = None
-    for intento in range(4):
+    for intento in range(2):
         try:
             resp = client.models.generate_content(
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.25,
-                    max_output_tokens=2200,
+                    max_output_tokens=1600,
                     tools=tools,
                 ),
             )
@@ -118,7 +137,7 @@ def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) ->
             msg = str(exc)
             if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "404" in msg or "API_KEY_INVALID" in msg:
                 break
-            time.sleep(2.0 * (intento + 1))
+            time.sleep(1.0 * (intento + 1))
 
     raise RuntimeError(str(ultimo_error))
 
@@ -126,28 +145,36 @@ def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) ->
 def consultar_groq(api_key: str, perfil: dict) -> dict:
     if Groq is None:
         raise RuntimeError("La librería 'groq' no está instalada. Agrégala a requirements.txt.")
-    client = Groq(api_key=api_key.strip(), timeout=60.0)
-    modelo_activo = obtener_modelo_groq(client)
+    client = Groq(api_key=api_key.strip(), timeout=45.0)
+    candidatos = listar_modelos_chat_groq(client)
     prompt = construir_prompt(perfil)
 
-    resp = client.chat.completions.create(
-        model=modelo_activo,
-        temperature=0.25,
-        max_tokens=2200,
-        messages=[
-            {
-                "role": "system",
-                "content": "Respondes únicamente en JSON válido sin bloques markdown ni texto extra.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-    )
-    texto = resp.choices[0].message.content or ""
-    data = extraer_json(texto)
-    if not isinstance(data.get("alertas"), list) or len(data["alertas"]) == 0:
-        raise ValueError("Groq no devolvió alertas estructuradas.")
-    data["motor_usado"] = f"Groq ({modelo_activo})"
-    return data
+    ultimo_error = None
+    for modelo_activo in candidatos:
+        try:
+            resp = client.chat.completions.create(
+                model=modelo_activo,
+                temperature=0.25,
+                max_tokens=1600,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Respondes únicamente en JSON válido sin bloques markdown ni texto extra.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            texto = resp.choices[0].message.content or ""
+            data = extraer_json(texto)
+            if not isinstance(data.get("alertas"), list) or len(data["alertas"]) == 0:
+                raise ValueError(f"{modelo_activo} no devolvió alertas estructuradas.")
+            data["motor_usado"] = f"Groq ({modelo_activo})"
+            return data
+        except Exception as exc:
+            ultimo_error = exc
+            continue
+
+    raise RuntimeError(f"Ningún modelo de chat en Groq respondió. Último error: {ultimo_error}")
 
 
 def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict, borrador: dict) -> str:
@@ -160,18 +187,22 @@ def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict
         f"Borrador: {resumen_borrador}"
     )
     if proveedor_secundario == "Groq" and Groq is not None and api_key.strip():
-        client = Groq(api_key=api_key.strip(), timeout=45.0)
-        modelo_activo = obtener_modelo_groq(client)
-        resp = client.chat.completions.create(
-            model=modelo_activo,
-            temperature=0.2,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt_auditoria}],
-        )
-        return (resp.choices[0].message.content or "").strip()
+        client = Groq(api_key=api_key.strip(), timeout=35.0)
+        for modelo_activo in listar_modelos_chat_groq(client):
+            try:
+                resp = client.chat.completions.create(
+                    model=modelo_activo,
+                    temperature=0.2,
+                    max_tokens=300,
+                    messages=[{"role": "user", "content": prompt_auditoria}],
+                )
+                return (resp.choices[0].message.content or "").strip()
+            except Exception:
+                continue
+        return ""
 
     if proveedor_secundario == "Google Gemini" and api_key.strip():
-        client = genai.Client(api_key=api_key.strip(), http_options=types.HttpOptions(timeout=45000))
+        client = genai.Client(api_key=api_key.strip(), http_options=types.HttpOptions(timeout=40))
         resp = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=prompt_auditoria,
@@ -207,7 +238,7 @@ with st.sidebar:
     usar_busqueda_gemini = st.checkbox(
         "Activar búsqueda web en Gemini",
         value=False,
-        help="Consume más cuota de Gemini; desactívalo si tienes límite de cuota ajustado.",
+        help="Puede hacer más lenta la respuesta en Gemini; déjalo desactivado si ves errores 504 o de cuota.",
     )
     auditoria_cruzada = st.checkbox(
         "Revisión cruzada con la segunda IA",
