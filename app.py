@@ -6,9 +6,9 @@ from google import genai
 from google.genai import types
 
 try:
-    import anthropic
+    from groq import Groq
 except ImportError:
-    anthropic = None
+    Groq = None
 
 st.set_page_config(
     page_title="LexAlert | Radar Normativo Empresarial",
@@ -41,20 +41,21 @@ def extraer_json(texto: str) -> dict:
     return json.loads(limpio)
 
 
-def construir_prompt_real(perfil: dict) -> str:
+def construir_prompt(perfil: dict) -> str:
     return (
         "Eres un abogado experto en regulación empresarial en Colombia. "
-        "Analiza la empresa y busca normativa REAL y vigente aplicable a su actividad, sector y ubicación. "
-        "NO inventes números de leyes, decretos ni resoluciones. Si no estás seguro del número exacto de una norma, "
-        "indica el tema y la entidad competente para verificación jurídica directa.\n"
+        "Analiza la empresa y entrega normativa real y vigente aplicable a su actividad, sector y ciudad, "
+        "detallando obligaciones de la empresa y qué debe hacer concretamente. "
+        "No inventes números de leyes, decretos ni resoluciones; si un número exacto no es seguro, "
+        "indica el marco normativo y la entidad competente para verificación directa.\n"
         "Responde ÚNICAMENTE con un JSON válido (sin markdown ni texto adicional) con esta estructura:\n"
         '{"resumen_ejecutivo":"...",'
-        '"alertas":[{"norma":"Denominación real y verificable de la norma o marco regulatorio",'
-        '"entidad":"Entidad reguladora o de vigilancia real",'
+        '"alertas":[{"norma":"Norma o marco regulatorio aplicable",'
+        '"entidad":"Entidad reguladora o de vigilancia",'
         '"impacto":"Alto|Medio|Bajo",'
-        '"obligaciones":"Obligaciones concretas que impone a la empresa según su actividad",'
-        '"que_hacer":"Acciones concretas que debe ejecutar la empresa"}]}\n'
-        "Entrega 4 puntos normativos reales y pertinentes para esta empresa:\n"
+        '"obligaciones":"Obligaciones concretas para la empresa",'
+        '"que_hacer":"Acciones concretas que debe hacer la empresa"}]}\n'
+        "Genera 4 puntos normativos para:\n"
         f"- Empresa: {perfil['nombre_empresa']}\n"
         f"- Sector: {perfil['sector']}\n"
         f"- Tamaño: {perfil['tamano']} ({perfil['empleados']} empleados)\n"
@@ -64,15 +65,16 @@ def construir_prompt_real(perfil: dict) -> str:
     )
 
 
-def llamar_gemini_real(api_key: str, perfil: dict) -> dict:
+def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) -> dict:
     client = genai.Client(
         api_key=api_key.strip(),
         http_options=types.HttpOptions(timeout=60000),
     )
-    prompt = construir_prompt_real(perfil)
+    prompt = construir_prompt(perfil)
+    tools = [{"google_search": {}}] if usar_busqueda else None
 
     ultimo_error = None
-    for intento in range(4):
+    for intento in range(2):
         try:
             resp = client.models.generate_content(
                 model="gemini-3.8-flash",
@@ -80,62 +82,112 @@ def llamar_gemini_real(api_key: str, perfil: dict) -> dict:
                 config=types.GenerateContentConfig(
                     temperature=0.25,
                     max_output_tokens=2200,
-                    tools=[{"google_search": {}}],
+                    tools=tools,
                 ),
             )
             data = extraer_json(resp.text or "")
             if not isinstance(data.get("alertas"), list) or len(data["alertas"]) == 0:
-                raise ValueError("La IA no devolvió alertas estructuradas.")
+                raise ValueError("Gemini no devolvió alertas estructuradas.")
+            data["motor_usado"] = "Google Gemini (gemini-3.8-flash)"
             return data
         except Exception as exc:
             ultimo_error = exc
             msg = str(exc)
-            if "404" in msg or "API_KEY_INVALID" in msg or "API key not valid" in msg:
+            if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "404" in msg or "API_KEY_INVALID" in msg:
                 break
-            time.sleep(2.0 * (intento + 1))
+            time.sleep(1.5 * (intento + 1))
 
     raise RuntimeError(str(ultimo_error))
 
 
-def llamar_claude_real(api_key: str, perfil: dict) -> dict:
-    if anthropic is None:
-        raise RuntimeError("La librería 'anthropic' no está instalada en el entorno.")
-    client = anthropic.Anthropic(api_key=api_key.strip(), timeout=60.0)
-    prompt = construir_prompt_real(perfil)
+def consultar_groq(api_key: str, perfil: dict) -> dict:
+    if Groq is None:
+        raise RuntimeError("La librería 'groq' no está instalada. Agrégala a requirements.txt.")
+    client = Groq(api_key=api_key.strip(), timeout=60.0)
+    prompt = construir_prompt(perfil)
 
-    msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2200,
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         temperature=0.25,
-        messages=[{"role": "user", "content": prompt}],
+        max_tokens=2200,
+        messages=[
+            {
+                "role": "system",
+                "content": "Respondes únicamente en JSON válido sin bloques markdown ni texto extra.",
+            },
+            {"role": "user", "content": prompt},
+        ],
     )
-    texto = "".join(getattr(b, "text", "") for b in msg.content if getattr(b, "type", "") == "text")
+    texto = resp.choices[0].message.content or ""
     data = extraer_json(texto)
     if not isinstance(data.get("alertas"), list) or len(data["alertas"]) == 0:
-        raise ValueError("Claude no devolvió alertas estructuradas.")
+        raise ValueError("Groq no devolvió alertas estructuradas.")
+    data["motor_usado"] = "Groq (llama-3.3-70b-versatile)"
     return data
+
+
+def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict, borrador: dict) -> str:
+    resumen_borrador = json.dumps(borrador, ensure_ascii=False)
+    prompt_auditoria = (
+        "Revisa este borrador de análisis normativo para una empresa en Colombia y entrega una nota breve "
+        "de auditoría (máximo 4 líneas) indicando si las obligaciones y acciones son coherentes con el perfil "
+        "y qué punto conviene validar primero.\n"
+        f"Perfil: {json.dumps(perfil, ensure_ascii=False)}\n"
+        f"Borrador: {resumen_borrador}"
+    )
+    if proveedor_secundario == "Groq" and Groq is not None and api_key.strip():
+        client = Groq(api_key=api_key.strip(), timeout=45.0)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            temperature=0.2,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt_auditoria}],
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    if proveedor_secundario == "Google Gemini" and api_key.strip():
+        client = genai.Client(api_key=api_key.strip(), http_options=types.HttpOptions(timeout=45000))
+        resp = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=prompt_auditoria,
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=300),
+        )
+        return (resp.text or "").strip()
+
+    return ""
 
 
 # --- Interfaz ---
 st.title("⚖️ LexAlert — Radar Normativo Empresarial")
-st.caption("Consulta normativa real, obligaciones y acciones para tu empresa.")
+st.caption("Motor dual con Google Gemini y Groq: respaldo automático entre IAs y auditoría cruzada.")
 
 with st.sidebar:
-    st.header("Configuración IA")
-    proveedor = st.selectbox("Proveedor", ["Google Gemini", "Anthropic Claude"])
+    st.header("Configuración Dual (Gemini + Groq)")
+    estrategia = st.selectbox(
+        "Modo de trabajo",
+        [
+            "Cascada automática (Gemini primero, si falla usa Groq)",
+            "Cascada inversa (Groq primero, si falla usa Gemini)",
+            "Solo Google Gemini",
+            "Solo Groq",
+        ],
+    )
 
     gemini_key_default = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
-    claude_key_default = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
+    groq_key_default = st.secrets.get("GROQ_API_KEY", "") if hasattr(st, "secrets") else ""
 
-    gemini_key = st.text_input(
-        "Gemini API Key",
-        value=gemini_key_default,
-        type="password",
+    gemini_key = st.text_input("Gemini API Key", value=gemini_key_default, type="password")
+    groq_key = st.text_input("Groq API Key", value=groq_key_default, type="password")
+
+    usar_busqueda_gemini = st.checkbox(
+        "Activar búsqueda web en Gemini",
+        value=False,
+        help="Consume más cuota de Gemini; desactívalo si tienes límite de cuota ajustado.",
     )
-    claude_key = st.text_input(
-        "Anthropic API Key",
-        value=claude_key_default,
-        type="password",
+    auditoria_cruzada = st.checkbox(
+        "Revisión cruzada con la segunda IA",
+        value=True,
+        help="Si ambas claves están presentes, la segunda IA revisa brevemente el resultado.",
     )
 
 col1, col2 = st.columns(2)
@@ -166,31 +218,94 @@ if st.button("Generar Análisis Normativo", type="primary"):
     }
 
     resultado = None
-    error_api = None
+    errores = []
+    nota_auditoria = ""
 
-    with st.spinner("Consultando información normativa real con la IA..."):
-        try:
-            if proveedor == "Google Gemini":
-                if not gemini_key.strip():
-                    raise ValueError("Debes ingresar tu Gemini API Key en la barra lateral.")
-                resultado = llamar_gemini_real(gemini_key, perfil)
+    with st.spinner("Consultando normativa con Gemini / Groq..."):
+        if estrategia == "Solo Google Gemini":
+            if not gemini_key.strip():
+                errores.append("Falta la Gemini API Key.")
             else:
-                if not claude_key.strip():
-                    raise ValueError("Debes ingresar tu Anthropic API Key en la barra lateral.")
-                resultado = llamar_claude_real(claude_key, perfil)
-        except Exception as err:
-            error_api = str(err)
+                try:
+                    resultado = consultar_gemini(gemini_key, perfil, usar_busqueda_gemini)
+                except Exception as exc:
+                    errores.append(f"Gemini: {exc}")
+
+        elif estrategia == "Solo Groq":
+            if not groq_key.strip():
+                errores.append("Falta la Groq API Key.")
+            else:
+                try:
+                    resultado = consultar_groq(groq_key, perfil)
+                except Exception as exc:
+                    errores.append(f"Groq: {exc}")
+
+        elif estrategia == "Cascada automática (Gemini primero, si falla usa Groq)":
+            if gemini_key.strip():
+                try:
+                    resultado = consultar_gemini(gemini_key, perfil, usar_busqueda_gemini)
+                except Exception as exc:
+                    errores.append(f"Gemini: {exc}")
+            else:
+                errores.append("Gemini: sin clave ingresada.")
+
+            if resultado is None:
+                if groq_key.strip():
+                    try:
+                        resultado = consultar_groq(groq_key, perfil)
+                    except Exception as exc:
+                        errores.append(f"Groq: {exc}")
+                else:
+                    errores.append("Groq: sin clave ingresada.")
+
+            if resultado and auditoria_cruzada and groq_key.strip() and "Groq" not in resultado.get("motor_usado", ""):
+                try:
+                    nota_auditoria = auditar_con_segunda_ia("Groq", groq_key, perfil, resultado)
+                except Exception:
+                    nota_auditoria = ""
+
+        elif estrategia == "Cascada inversa (Groq primero, si falla usa Gemini)":
+            if groq_key.strip():
+                try:
+                    resultado = consultar_groq(groq_key, perfil)
+                except Exception as exc:
+                    errores.append(f"Groq: {exc}")
+            else:
+                errores.append("Groq: sin clave ingresada.")
+
+            if resultado is None:
+                if gemini_key.strip():
+                    try:
+                        resultado = consultar_gemini(gemini_key, perfil, usar_busqueda_gemini)
+                    except Exception as exc:
+                        errores.append(f"Gemini: {exc}")
+                else:
+                    errores.append("Gemini: sin clave ingresada.")
+
+            if resultado and auditoria_cruzada and gemini_key.strip() and "Gemini" not in resultado.get("motor_usado", ""):
+                try:
+                    nota_auditoria = auditar_con_segunda_ia("Google Gemini", gemini_key, perfil, resultado)
+                except Exception:
+                    nota_auditoria = ""
 
     tab1, tab2 = st.tabs(["🛡️ Análisis Normativo", "📋 Perfil de la Empresa"])
 
     with tab1:
-        if error_api:
-            st.error(
-                f"No se pudo completar la consulta en vivo con {proveedor}: {error_api}\n\n"
-                "Intenta pulsar el botón nuevamente o cambia de proveedor en la barra lateral si tienes clave de Anthropic Claude."
-            )
+        if resultado is None:
+            st.error("No se pudo obtener respuesta de ninguna IA:\n\n" + "\n\n".join(errores))
         else:
-            st.success("✅ Consulta completada con IA.")
+            if errores and "Cascada" in estrategia:
+                st.info(
+                    f"Respondido por **{resultado.get('motor_usado')}** tras contingencia en el primer motor "
+                    f"({errores[0]})."
+                )
+            else:
+                st.success(f"✅ Análisis completado con **{resultado.get('motor_usado')}**.")
+
+            if nota_auditoria:
+                st.markdown("**Revisión cruzada:**")
+                st.caption(nota_auditoria)
+
             st.subheader("Resumen Ejecutivo")
             st.write(resultado.get("resumen_ejecutivo", ""))
 
