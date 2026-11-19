@@ -111,7 +111,7 @@ def llamar_gemini_con_reintentos(api_key: str, prompt: str, intentos: int = 3) -
     client_gemini = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
-            timeout=25,
+            timeout=60000,
         ),
     )
     ultimo_error = None
