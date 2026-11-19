@@ -65,6 +65,29 @@ def construir_prompt(perfil: dict) -> str:
     )
 
 
+def obtener_modelo_groq(client: Groq) -> str:
+    modelos = client.models.list()
+    ids = [
+        getattr(m, "id", "")
+        for m in getattr(modelos, "data", [])
+        if getattr(m, "id", "")
+        and "whisper" not in getattr(m, "id", "").lower()
+        and "guard" not in getattr(m, "id", "").lower()
+    ]
+    preferencias = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama-4-scout-17b-16e-instruct",
+        "qwen/qwen3-32b",
+    ]
+    for pref in preferencias:
+        if pref in ids:
+            return pref
+    if ids:
+        return ids[0]
+    raise RuntimeError("No se encontraron modelos de chat disponibles en tu cuenta de Groq.")
+
+
 def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) -> dict:
     client = genai.Client(
         api_key=api_key.strip(),
@@ -74,7 +97,7 @@ def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) ->
     tools = [{"google_search": {}}] if usar_busqueda else None
 
     ultimo_error = None
-    for intento in range(2):
+    for intento in range(4):
         try:
             resp = client.models.generate_content(
                 model="gemini-3.8-flash",
@@ -95,7 +118,7 @@ def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) ->
             msg = str(exc)
             if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "404" in msg or "API_KEY_INVALID" in msg:
                 break
-            time.sleep(1.5 * (intento + 1))
+            time.sleep(2.0 * (intento + 1))
 
     raise RuntimeError(str(ultimo_error))
 
@@ -104,10 +127,11 @@ def consultar_groq(api_key: str, perfil: dict) -> dict:
     if Groq is None:
         raise RuntimeError("La librería 'groq' no está instalada. Agrégala a requirements.txt.")
     client = Groq(api_key=api_key.strip(), timeout=60.0)
+    modelo_activo = obtener_modelo_groq(client)
     prompt = construir_prompt(perfil)
 
     resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=modelo_activo,
         temperature=0.25,
         max_tokens=2200,
         messages=[
@@ -122,7 +146,7 @@ def consultar_groq(api_key: str, perfil: dict) -> dict:
     data = extraer_json(texto)
     if not isinstance(data.get("alertas"), list) or len(data["alertas"]) == 0:
         raise ValueError("Groq no devolvió alertas estructuradas.")
-    data["motor_usado"] = "Groq (llama-3.3-70b-versatile)"
+    data["motor_usado"] = f"Groq ({modelo_activo})"
     return data
 
 
@@ -137,8 +161,9 @@ def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict
     )
     if proveedor_secundario == "Groq" and Groq is not None and api_key.strip():
         client = Groq(api_key=api_key.strip(), timeout=45.0)
+        modelo_activo = obtener_modelo_groq(client)
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=modelo_activo,
             temperature=0.2,
             max_tokens=300,
             messages=[{"role": "user", "content": prompt_auditoria}],
