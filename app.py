@@ -51,21 +51,42 @@ def extraer_json(texto: str) -> dict:
     return json.loads(limpio)
 
 
+def normalizar_impacto(valor: str) -> str:
+    txt = (valor or "").strip().lower()
+    if "alto" in txt or "rojo" in txt:
+        return "Alto"
+    if "bajo" in txt or "verde" in txt:
+        return "Bajo"
+    return "Medio"
+
+
+def insignia_semaforo(impacto: str) -> str:
+    nivel = normalizar_impacto(impacto)
+    if nivel == "Alto":
+        return "🔴 ROJO — Impacto Alto"
+    if nivel == "Bajo":
+        return "🟢 VERDE — Impacto Bajo"
+    return "🟡 AMARILLO — Impacto Medio"
+
+
 def construir_prompt(perfil: dict) -> str:
     return (
-        "Eres un abogado experto en regulación empresarial en Colombia. "
-        "Analiza la empresa y entrega normativa real y vigente aplicable a su actividad, sector y ciudad, "
-        "detallando obligaciones de la empresa y qué debe hacer concretamente. "
-        "No inventes números de leyes, decretos ni resoluciones; si un número exacto no es seguro, "
-        "indica el marco normativo y la entidad competente para verificación directa.\n"
+        "Eres un abogado experto en regulación empresarial en Colombia en 2026. "
+        "Analiza la empresa y entrega NORMAS NUEVAS y RECIENTES (priorizando 2024, 2025 y 2026) "
+        "o actualizaciones regulatorias vigentes que afecten directamente su operación, sector, ciudad y riesgos. "
+        "Evita quedarte en leyes antiguas genéricas de siempre; enfócate en novedades, decretos, resoluciones, "
+        "circulares, reglas de vigilancia o cambios normativos recientes aplicables. "
+        "No inventes números de normas; si un número exacto no es seguro, indica el marco regulatorio "
+        "y la entidad competente para verificación directa.\n"
         "Responde ÚNICAMENTE con un JSON válido (sin markdown ni texto adicional) con esta estructura:\n"
         '{"resumen_ejecutivo":"...",'
-        '"alertas":[{"norma":"Norma o marco regulatorio aplicable",'
+        '"alertas":[{"norma":"Norma reciente o actualización regulatoria (con año si aplica)",'
+        '"vigencia":"Reciente / 2024-2026 o Vigente",'
         '"entidad":"Entidad reguladora o de vigilancia",'
         '"impacto":"Alto|Medio|Bajo",'
-        '"obligaciones":"Obligaciones concretas para la empresa",'
+        '"obligaciones":"Obligaciones concretas que genera para la empresa",'
         '"que_hacer":"Acciones concretas que debe hacer la empresa"}]}\n'
-        "Genera 4 puntos normativos para:\n"
+        "Genera 6 normas relevantes y variadas para:\n"
         f"- Empresa: {perfil['nombre_empresa']}\n"
         f"- Sector: {perfil['sector']}\n"
         f"- Tamaño: {perfil['tamano']} ({perfil['empleados']} empleados)\n"
@@ -122,8 +143,8 @@ def consultar_gemini(api_key: str, perfil: dict, usar_busqueda: bool = False) ->
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0.25,
-                    max_output_tokens=1600,
+                    temperature=0.45,
+                    max_output_tokens=2800,
                     tools=tools,
                 ),
             )
@@ -154,12 +175,15 @@ def consultar_groq(api_key: str, perfil: dict) -> dict:
         try:
             resp = client.chat.completions.create(
                 model=modelo_activo,
-                temperature=0.25,
-                max_tokens=1600,
+                temperature=0.45,
+                max_tokens=2800,
                 messages=[
                     {
                         "role": "system",
-                        "content": "Respondes únicamente en JSON válido sin bloques markdown ni texto extra.",
+                        "content": (
+                            "Eres un abogado experto en normativa colombiana reciente (2024-2026). "
+                            "Respondes únicamente en JSON válido sin bloques markdown ni texto extra."
+                        ),
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -180,9 +204,8 @@ def consultar_groq(api_key: str, perfil: dict) -> dict:
 def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict, borrador: dict) -> str:
     resumen_borrador = json.dumps(borrador, ensure_ascii=False)
     prompt_auditoria = (
-        "Revisa este borrador de análisis normativo para una empresa en Colombia y entrega una nota breve "
-        "de auditoría (máximo 4 líneas) indicando si las obligaciones y acciones son coherentes con el perfil "
-        "y qué punto conviene validar primero.\n"
+        "Revisa este borrador de normas recientes para una empresa en Colombia y entrega una nota breve "
+        "(máximo 4 líneas) indicando qué tan actual y aplicable es y cuál es la prioridad inmediata.\n"
         f"Perfil: {json.dumps(perfil, ensure_ascii=False)}\n"
         f"Borrador: {resumen_borrador}"
     )
@@ -192,8 +215,8 @@ def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict
             try:
                 resp = client.chat.completions.create(
                     model=modelo_activo,
-                    temperature=0.2,
-                    max_tokens=300,
+                    temperature=0.3,
+                    max_tokens=320,
                     messages=[{"role": "user", "content": prompt_auditoria}],
                 )
                 return (resp.choices[0].message.content or "").strip()
@@ -206,7 +229,7 @@ def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict
         resp = client.models.generate_content(
             model="gemini-3.8-flash",
             contents=prompt_auditoria,
-            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=300),
+            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=320),
         )
         return (resp.text or "").strip()
 
@@ -215,15 +238,15 @@ def auditar_con_segunda_ia(proveedor_secundario: str, api_key: str, perfil: dict
 
 # --- Interfaz ---
 st.title("⚖️ LexAlert — Radar Normativo Empresarial")
-st.caption("Motor dual con Google Gemini y Groq: respaldo automático entre IAs y auditoría cruzada.")
+st.caption("Normativa nueva y reciente, semáforo de impacto y plan de acción para tu empresa.")
 
 with st.sidebar:
     st.header("Configuración Dual (Gemini + Groq)")
     estrategia = st.selectbox(
         "Modo de trabajo",
         [
-            "Cascada automática (Gemini primero, si falla usa Groq)",
             "Cascada inversa (Groq primero, si falla usa Gemini)",
+            "Cascada automática (Gemini primero, si falla usa Groq)",
             "Solo Google Gemini",
             "Solo Groq",
         ],
@@ -238,12 +261,12 @@ with st.sidebar:
     usar_busqueda_gemini = st.checkbox(
         "Activar búsqueda web en Gemini",
         value=False,
-        help="Puede hacer más lenta la respuesta en Gemini; déjalo desactivado si ves errores 504 o de cuota.",
+        help="Útil si usas Gemini y quieres reforzar consulta web; puede tardar más.",
     )
     auditoria_cruzada = st.checkbox(
         "Revisión cruzada con la segunda IA",
         value=True,
-        help="Si ambas claves están presentes, la segunda IA revisa brevemente el resultado.",
+        help="Si ambas claves están presentes, la segunda IA revisa el resultado.",
     )
 
 col1, col2 = st.columns(2)
@@ -277,7 +300,7 @@ if st.button("Generar Análisis Normativo", type="primary"):
     errores = []
     nota_auditoria = ""
 
-    with st.spinner("Consultando normativa con Gemini / Groq..."):
+    with st.spinner("Consultando normativa reciente con Gemini / Groq..."):
         if estrategia == "Solo Google Gemini":
             if not gemini_key.strip():
                 errores.append("Falta la Gemini API Key.")
@@ -344,7 +367,7 @@ if st.button("Generar Análisis Normativo", type="primary"):
                 except Exception:
                     nota_auditoria = ""
 
-    tab1, tab2 = st.tabs(["🛡️ Análisis Normativo", "📋 Perfil de la Empresa"])
+    tab1, tab2 = st.tabs(["🛡️ Normas y Plan de Acción", "🚦 Semáforo y Resumen de la Empresa"])
 
     with tab1:
         if resultado is None:
@@ -358,20 +381,33 @@ if st.button("Generar Análisis Normativo", type="primary"):
             else:
                 st.success(f"✅ Análisis completado con **{resultado.get('motor_usado')}**.")
 
+            alertas = resultado.get("alertas", [])
+            altos = sum(1 for a in alertas if normalizar_impacto(a.get("impacto", "")) == "Alto")
+            medios = sum(1 for a in alertas if normalizar_impacto(a.get("impacto", "")) == "Medio")
+            bajos = sum(1 for a in alertas if normalizar_impacto(a.get("impacto", "")) == "Bajo")
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Normas detectadas", len(alertas))
+            m2.metric("🔴 Semáforo Rojo (Alto)", altos)
+            m3.metric("🟡 Semáforo Amarillo (Medio)", medios)
+            m4.metric("🟢 Semáforo Verde (Bajo)", bajos)
+
             if nota_auditoria:
-                st.markdown("**Revisión cruzada:**")
-                st.caption(nota_auditoria)
+                st.info(f"**Revisión cruzada:** {nota_auditoria}")
 
             st.subheader("Resumen Ejecutivo")
             st.write(resultado.get("resumen_ejecutivo", ""))
 
-            st.subheader("Normativa, Obligaciones y Qué Hacer")
-            for idx, item in enumerate(resultado.get("alertas", []), start=1):
+            st.subheader("Normas Recientes, Obligaciones y Qué Hacer")
+            for idx, item in enumerate(alertas, start=1):
+                nivel_sem = insignia_semaforo(item.get("impacto", "Medio"))
+                vigencia = item.get("vigencia", "Vigente / Reciente")
                 with st.container(border=True):
                     st.markdown(f"### {idx}. {item.get('norma', '')}")
-                    st.caption(
-                        f"**Entidad:** {item.get('entidad', 'No especificada')} | "
-                        f"**Impacto:** {item.get('impacto', 'Medio')}"
+                    st.markdown(
+                        f"**{nivel_sem}** &nbsp;|&nbsp; "
+                        f"**Entidad:** {item.get('entidad', 'No especificada')} &nbsp;|&nbsp; "
+                        f"**Vigencia:** {vigencia}"
                     )
                     st.markdown("**Obligaciones para la empresa:**")
                     st.write(item.get("obligaciones", ""))
@@ -379,11 +415,69 @@ if st.button("Generar Análisis Normativo", type="primary"):
                     st.write(item.get("que_hacer", ""))
 
     with tab2:
-        st.subheader("Información de la Empresa")
-        st.markdown(f"**Nombre:** {perfil['nombre_empresa']}")
-        st.markdown(f"**Sector:** {perfil['sector']}")
-        st.markdown(f"**Tamaño:** {perfil['tamano']}")
-        st.markdown(f"**Número de empleados:** {perfil['empleados']}")
-        st.markdown(f"**Ciudad:** {perfil['ciudad']}")
-        st.markdown(f"**Actividad:** {perfil['actividad']}")
-        st.markdown(f"**Riesgos o temas clave:** {perfil['riesgos']}")
+        st.subheader("🚦 Semáforo de Afectación a la Empresa")
+        st.caption("Clasificación de las normas según la fuerza con la que pueden impactar la operación.")
+
+        alertas_tab2 = resultado.get("alertas", []) if resultado else []
+        if not alertas_tab2:
+            st.info("Genera primero un análisis normativo para ver aquí el semáforo de normas y la ficha visual.")
+        else:
+            col_rojo, col_amarillo, col_verde = st.columns(3)
+
+            with col_rojo:
+                st.markdown("#### 🔴 Impacto Alto")
+                grupo_alto = [a for a in alertas_tab2 if normalizar_impacto(a.get("impacto", "")) == "Alto"]
+                if grupo_alto:
+                    for a in grupo_alto:
+                        with st.container(border=True):
+                            st.markdown(f"**{a.get('norma', '')}**")
+                            st.caption(a.get("entidad", ""))
+                            st.write(a.get("que_hacer", ""))
+                else:
+                    st.caption("Sin normas en nivel alto.")
+
+            with col_amarillo:
+                st.markdown("#### 🟡 Impacto Medio")
+                grupo_medio = [a for a in alertas_tab2 if normalizar_impacto(a.get("impacto", "")) == "Medio"]
+                if grupo_medio:
+                    for a in grupo_medio:
+                        with st.container(border=True):
+                            st.markdown(f"**{a.get('norma', '')}**")
+                            st.caption(a.get("entidad", ""))
+                            st.write(a.get("que_hacer", ""))
+                else:
+                    st.caption("Sin normas en nivel medio.")
+
+            with col_verde:
+                st.markdown("#### 🟢 Impacto Bajo")
+                grupo_bajo = [a for a in alertas_tab2 if normalizar_impacto(a.get("impacto", "")) == "Bajo"]
+                if grupo_bajo:
+                    for a in grupo_bajo:
+                        with st.container(border=True):
+                            st.markdown(f"**{a.get('norma', '')}**")
+                            st.caption(a.get("entidad", ""))
+                            st.write(a.get("que_hacer", ""))
+                else:
+                    st.caption("Sin normas en nivel bajo.")
+
+        st.divider()
+        st.subheader("🏢 Perfil de la Empresa")
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            with st.container(border=True):
+                st.markdown("**Identificación**")
+                st.write(f"**Empresa:** {perfil['nombre_empresa']}")
+                st.write(f"**Ciudad:** {perfil['ciudad']}")
+        with p2:
+            with st.container(border=True):
+                st.markdown("**Escala y Sector**")
+                st.write(f"**Sector:** {perfil['sector']}")
+                st.write(f"**Tamaño:** {perfil['tamano']} ({perfil['empleados']} empleados)")
+        with p3:
+            with st.container(border=True):
+                st.markdown("**Focos de Riesgo**")
+                st.write(perfil["riesgos"])
+
+        with st.container(border=True):
+            st.markdown("**Actividad declarada**")
+            st.write(perfil["actividad"])
