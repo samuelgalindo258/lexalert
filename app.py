@@ -30,71 +30,67 @@ SECTORES_COLOMBIA = [
 ]
 
 
-def generar_respaldo_dinamico(perfil: dict, motivo: str) -> dict:
-    """Respaldo adaptable a la ciudad, sector y texto libre ingresado en vivo."""
+def generar_respaldo_empresa(perfil: dict, motivo: str) -> dict:
     nombre = perfil.get("nombre_empresa", "la empresa")
     sector = perfil.get("sector", "Otro")
     tamano = perfil.get("tamano", "PyME")
     empleados = perfil.get("empleados", 0)
-    ciudad = perfil.get("ciudad", "la ciudad indicada")
+    ciudad = perfil.get("ciudad", "Colombia")
     actividad = perfil.get("actividad", "")
     riesgos = perfil.get("riesgos", "")
 
-    extracto_op = actividad[:130].strip() if actividad else f"operación en {sector}"
-    extracto_riesgo = riesgos[:110].strip() if riesgos else "cumplimiento regulatorio y vigilancia"
-
     alertas = [
         {
-            "id": "NOV-01",
-            "norma": f"Actualizaciones regulatorias recientes y vigilancia sectorial ({sector} — 2024–2026)",
-            "entidad": "Ministerio del ramo / Superintendencia o autoridad competente",
+            "id": "LEX-01",
+            "norma": f"Actualizaciones normativas y regulación sectorial vigente ({sector})",
+            "entidad": "Ministerio sectorial / Superintendencia competente",
             "impacto": "Alto",
-            "resumen_aplicacion": (
-                f"Evalúa novedades normativas y líneas de supervisión vigentes sobre '{extracto_op}' "
-                f"para {nombre} ({tamano}, {empleados} empleados), más allá de las obligaciones básicas tradicionales."
+            "obligaciones": (
+                f"Alinear los procesos de {nombre} en {ciudad} con las exigencias vigentes del sector {sector} "
+                f"y documentar los controles operativos exigidos para una organización de tamaño {tamano}."
             ),
-            "accion_recomendada": (
-                f"Contrastar los procesos actuales de {nombre} frente a resoluciones, circulares o guías "
-                f"emitidas recientemente en {sector}."
+            "que_hacer": (
+                f"Realizar un diagnóstico de brechas normativas en {nombre} sobre '{actividad[:120]}' "
+                "y asignar responsables por cada requisito aplicable."
             ),
         },
         {
-            "id": "NOV-02",
-            "norma": f"Normativa territorial, POT, uso del suelo y trámites locales en {ciudad}",
-            "entidad": f"Alcaldía / Secretaría de Planeación o Autoridad Ambiental de {ciudad}",
+            "id": "LEX-02",
+            "norma": "Normativa laboral, jornada y gestión de riesgos en el entorno de trabajo",
+            "entidad": "Ministerio del Trabajo",
+            "impacto": "Alto" if empleados >= 10 else "Medio",
+            "obligaciones": (
+                f"Cumplir con las reglas vigentes de jornada laboral, contratación y seguridad y salud "
+                f"para el equipo de {empleados} colaboradores de {nombre}."
+            ),
+            "que_hacer": (
+                "Revisar turnos, políticas internas, afiliaciones y planes de prevención de riesgos laborales."
+            ),
+        },
+        {
+            "id": "LEX-03",
+            "norma": "Protección de datos personales, privacidad y gobernanza de información",
+            "entidad": "Superintendencia de Industria y Comercio (SIC)",
             "impacto": "Alto",
-            "resumen_aplicacion": (
-                f"Aplica a la operación de {nombre} en {ciudad}: verifica compatibilidad de uso, "
-                f"exigencias locales, movilidad, ruido, residuos o licencias propias de {ciudad} para '{extracto_op}'."
+            "obligaciones": (
+                "Contar con políticas de tratamiento de datos actualizadas, autorizaciones de titulares "
+                "y medidas de seguridad acordes con el manejo de información de clientes, proveedores y empleados."
             ),
-            "accion_recomendada": (
-                f"Verificar requisitos vigentes de funcionamiento y normatividad territorial específica de {ciudad}."
-            ),
-        },
-        {
-            "id": "NOV-03",
-            "norma": f"Control de riesgos emergentes y reporte/cumplimiento ({extracto_riesgo})",
-            "entidad": "Entidad de inspección, vigilancia y control (IVC)",
-            "impacto": "Medio",
-            "resumen_aplicacion": (
-                f"Aborda el frente de '{extracto_riesgo}' en una organización de tamaño {tamano} "
-                f"con {empleados} colaboradores, exigiendo controles documentados y trazabilidad."
-            ),
-            "accion_recomendada": (
-                f"Definir un control verificable sobre '{extracto_riesgo}' adaptable a la escala de {nombre}."
+            "que_hacer": (
+                "Actualizar avisos de privacidad, inventarios de bases de datos y acuerdos de confidencialidad."
             ),
         },
         {
-            "id": "NOV-04",
-            "norma": "Exigencias de transparencia digital, facturación, trazabilidad y gobernanza de datos",
-            "entidad": "DIAN / SIC / Autoridad sectorial correspondiente",
+            "id": "LEX-04",
+            "norma": "Cumplimiento tributario, facturación electrónica y gestión de riesgos prioritarios",
+            "entidad": "DIAN / Entidad de vigilancia correspondiente",
             "impacto": "Medio",
-            "resumen_aplicacion": (
-                f"Revisa obligaciones operativas recientes asociadas a digitalización, soporte documental, "
-                f"intercambio de información y protección de datos en '{extracto_op}'."
+            "obligaciones": (
+                f"Mantener al día soportes contables, facturación y controles frente a los riesgos indicados "
+                f"({riesgos[:110] if riesgos else 'cumplimiento general'})."
             ),
-            "accion_recomendada": (
-                "Auditar soportes digitales, contratos con terceros y flujos de información de la empresa."
+            "que_hacer": (
+                "Establecer un calendario mensual de control y auditoría interna sobre las obligaciones críticas."
             ),
         },
     ]
@@ -103,8 +99,8 @@ def generar_respaldo_dinamico(perfil: dict, motivo: str) -> dict:
         "modo_respaldo": True,
         "motivo_respaldo": motivo,
         "resumen_ejecutivo": (
-            f"Análisis dinámico de contingencia para {nombre} en {ciudad} ({sector}, {tamano}, "
-            f"{empleados} empleados), enfocado en normativa territorial, novedades sectoriales y '{extracto_riesgo}'."
+            f"Análisis normativo para {nombre} ({sector}, {tamano}, {empleados} empleados en {ciudad}). "
+            f"Enfoque en normativa nueva y vigente, obligaciones clave y plan de acción para la empresa."
         ),
         "alertas": alertas,
     }
@@ -121,26 +117,24 @@ def extraer_json(texto: str) -> dict:
     return json.loads(limpio)
 
 
-def construir_prompt_novedad(perfil: dict) -> str:
+def construir_prompt_empresa(perfil: dict) -> str:
     return (
-        "Actúa como abogado experto en regulación colombiana y derecho administrativo/territorial. "
-        "El usuario está haciendo una prueba en vivo con un caso nuevo. "
-        "EVITA mencionar únicamente leyes generales archiconocidas de siempre (como solo decir Ley 1581 o Código Sustantivo "
-        "de forma genérica). Prioriza NORMAS RECIENTES (2023–2026), decretos, resoluciones, circulares, guías de vigilancia "
-        "o exigencias específicas vinculadas a la CIUDAD/MUNICIPIO y a la ACTIVIDAD exacta descrita.\n"
-        "Responde ÚNICAMENTE con un JSON válido (sin markdown ni texto extra) con esta estructura exacta:\n"
+        "Eres un abogado experto en regulación empresarial en Colombia. "
+        "Analiza la empresa y entrega NORMAS NUEVAS y vigentes aplicables a su actividad y sector, "
+        "detallando con claridad las obligaciones de la empresa y qué debe hacer concretamente. "
+        "Responde ÚNICAMENTE con un JSON válido (sin markdown ni texto adicional) con esta estructura:\n"
         '{"resumen_ejecutivo":"...",'
-        '"alertas":[{"id":"NOV-01","norma":"Norma específica, reciente o territorial con año/número si aplica",'
-        '"entidad":"Entidad reguladora o autoridad local/sectorial","impacto":"Alto|Medio|Bajo",'
-        '"resumen_aplicacion":"Por qué aplica a esta empresa, actividad y ciudad en 1-2 oraciones",'
-        '"accion_recomendada":"Acción concreta en 1 oración"}]}\n'
-        "Genera 4 alertas variadas y específicas para este caso en vivo:\n"
+        '"alertas":[{"id":"LEX-01","norma":"Nombre, número y año de la norma nueva o vigente",'
+        '"entidad":"Entidad reguladora","impacto":"Alto|Medio|Bajo",'
+        '"obligaciones":"Obligaciones concretas que impone a la empresa",'
+        '"que_hacer":"Qué debe hacer paso a paso la empresa para cumplir"}]}\n'
+        "Genera 4 normas relevantes y actuales para:\n"
         f"- Empresa: {perfil['nombre_empresa']}\n"
         f"- Sector: {perfil['sector']}\n"
         f"- Tamaño: {perfil['tamano']} ({perfil['empleados']} empleados)\n"
-        f"- Ciudad/Municipio: {perfil['ciudad']}, Colombia\n"
-        f"- Actividad y operación: {perfil['actividad']}\n"
-        f"- Focos/Riesgos indicados: {perfil['riesgos']}"
+        f"- Ciudad: {perfil['ciudad']}\n"
+        f"- Actividad: {perfil['actividad']}\n"
+        f"- Riesgos / prioridades: {perfil['riesgos']}"
     )
 
 
@@ -149,17 +143,17 @@ def llamar_gemini(api_key: str, perfil: dict) -> dict:
         api_key=api_key.strip(),
         http_options=types.HttpOptions(timeout=60000),
     )
-    prompt = construir_prompt_novedad(perfil)
+    prompt = construir_prompt_empresa(perfil)
 
     ultimo_error = None
-    for intento in range(5):
+    for intento in range(3):
         try:
             resp = client.models.generate_content(
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    temperature=0.65,
-                    max_output_tokens=1800,
+                    temperature=0.4,
+                    max_output_tokens=2000,
                 ),
             )
             data = extraer_json(resp.text or "")
@@ -173,7 +167,7 @@ def llamar_gemini(api_key: str, perfil: dict) -> dict:
             msg = str(exc)
             if "404" in msg or "API_KEY_INVALID" in msg or "API key not valid" in msg:
                 break
-            time.sleep(2.5 * (intento + 1))
+            time.sleep(1.5 * (intento + 1))
 
     raise RuntimeError(str(ultimo_error))
 
@@ -182,12 +176,12 @@ def llamar_claude(api_key: str, perfil: dict) -> dict:
     if anthropic is None:
         raise RuntimeError("Librería anthropic no instalada.")
     client = anthropic.Anthropic(api_key=api_key.strip(), timeout=60.0)
-    prompt = construir_prompt_novedad(perfil)
+    prompt = construir_prompt_empresa(perfil)
 
     msg = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=1800,
-        temperature=0.65,
+        max_tokens=2000,
+        temperature=0.4,
         messages=[{"role": "user", "content": prompt}],
     )
     texto = "".join(getattr(b, "text", "") for b in msg.content if getattr(b, "type", "") == "text")
@@ -201,11 +195,11 @@ def llamar_claude(api_key: str, perfil: dict) -> dict:
 
 # --- Interfaz ---
 st.title("⚖️ LexAlert — Radar Normativo Empresarial")
-st.caption("Evaluación en vivo de normativa reciente, territorial y sectorial según los datos de cada empresa.")
+st.caption("Normas nuevas, obligaciones y plan de acción adaptado a tu empresa.")
 
 with st.sidebar:
-    st.header("Configuración del motor IA")
-    proveedor = st.selectbox("Proveedor principal", ["Google Gemini", "Anthropic Claude"])
+    st.header("Configuración IA")
+    proveedor = st.selectbox("Proveedor", ["Google Gemini", "Anthropic Claude"])
 
     gemini_key_default = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
     claude_key_default = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
@@ -214,73 +208,67 @@ with st.sidebar:
         "Gemini API Key",
         value=gemini_key_default,
         type="password",
-        help="Obtén tu clave en Google AI Studio.",
     )
     claude_key = st.text_input(
-        "Anthropic API Key (opcional)",
+        "Anthropic API Key",
         value=claude_key_default,
         type="password",
     )
 
-    modo_sin_conexion = st.checkbox(
-        "Forzar modo presentación / respaldo dinámico",
+    modo_respaldo_manual = st.checkbox(
+        "Modo respaldo local",
         value=False,
-        help="Actívalo solo si quieres simular el respaldo sin llamar a la API.",
     )
 
 col1, col2 = st.columns(2)
 with col1:
-    nombre_empresa = st.text_input("Nombre de la empresa", placeholder="Ej. Logística del Pacífico S.A.S.")
+    nombre_empresa = st.text_input("Nombre de la empresa", placeholder="Ej. Salud S.A.S.")
     sector = st.selectbox("Sector económico", SECTORES_COLOMBIA)
     tamano = st.selectbox("Tamaño de empresa", ["Microempresa", "Pequeña", "Mediana", "Grande"])
 with col2:
-    empleados = st.number_input("Número de empleados", min_value=1, max_value=100000, value=25, step=1)
-    ciudad = st.text_input("Ciudad / municipio de operación", placeholder="Ej. Medellín, Cali, Barranquilla...")
-    riesgos = st.text_input("Focos, retos o riesgos a evaluar", placeholder="Ej. Permisos locales, trazabilidad, contratos")
+    empleados = st.number_input("Número de empleados", min_value=1, max_value=100000, value=15, step=1)
+    ciudad = st.text_input("Ciudad", value="Bogotá")
+    riesgos = st.text_input("Riesgos o temas clave", placeholder="Ej. Contratos, salubridad, datos")
 
 actividad = st.text_area(
-    "Actividad principal y modelo de operación (para prueba en vivo)",
-    height=105,
-    placeholder="Escribe aquí la operación real o hipotética que quiera probar el docente...",
+    "Actividad de la empresa",
+    height=100,
+    placeholder="Describe a qué se dedica la empresa...",
 )
 
-analizar = st.button("Analizar Perfil y Generar Alertas Normativas", type="primary")
-
-if analizar:
+if st.button("Generar Análisis Normativo", type="primary"):
     perfil = {
-        "nombre_empresa": nombre_empresa.strip() or "Empresa de prueba en vivo",
+        "nombre_empresa": nombre_empresa.strip() or "Empresa",
         "sector": sector,
         "tamano": tamano,
         "empleados": int(empleados),
-        "ciudad": ciudad.strip() or "Ciudad no especificada",
+        "ciudad": ciudad.strip() or "Colombia",
         "actividad": actividad.strip() or f"Operación en {sector}",
-        "riesgos": riesgos.strip() or "Novedades normativas, cumplimiento local y control operativo",
+        "riesgos": riesgos.strip() or "Cumplimiento normativo general",
     }
 
-    resultado = None
-    with st.spinner("Buscando normativa reciente y aplicable a la ciudad y actividad ingresadas..."):
-        if modo_sin_conexion:
-            resultado = generar_respaldo_dinamico(perfil, "Activado manualmente en modo presentación")
+    with st.spinner("Analizando normativa aplicable a la empresa..."):
+        if modo_respaldo_manual:
+            resultado = generar_respaldo_empresa(perfil, "Modo respaldo local activado")
         else:
             try:
                 if proveedor == "Google Gemini":
                     if not gemini_key.strip():
-                        raise ValueError("Falta ingresar la Gemini API Key en la barra lateral.")
+                        raise ValueError("Ingresa tu Gemini API Key en la barra lateral.")
                     resultado = llamar_gemini(gemini_key, perfil)
                 else:
                     if not claude_key.strip():
-                        raise ValueError("Falta ingresar la Anthropic API Key en la barra lateral.")
+                        raise ValueError("Ingresa tu Anthropic API Key en la barra lateral.")
                     resultado = llamar_claude(claude_key, perfil)
             except Exception as err:
-                resultado = generar_respaldo_dinamico(perfil, str(err))
+                resultado = generar_respaldo_empresa(perfil, str(err))
 
     tab1, tab2 = st.tabs(["🛡️ Alerta Final Auditada", "📋 Perfil Analizado"])
 
     with tab1:
         if resultado.get("modo_respaldo"):
             st.warning(
-                f"⚠️ Se activó el respaldo dinámico por bloqueo/timeout SSL en la red ({resultado.get('motivo_respaldo')}). "
-                "El reporte sigue disponible para tu presentación."
+                f"⚠️ Se activó el respaldo local ({resultado.get('motivo_respaldo')})."
             )
         else:
             st.success("✅ Auditoría completada.")
@@ -288,57 +276,25 @@ if analizar:
         st.subheader("Resumen Ejecutivo")
         st.write(resultado.get("resumen_ejecutivo", ""))
 
-        st.subheader("Normativa y Alertas Identificadas")
+        st.subheader("Normativa, Obligaciones y Qué Hacer")
         for item in resultado.get("alertas", []):
             with st.container(border=True):
-                st.markdown(f"**{item.get('id', '')} — {item.get('norma', '')}**")
+                st.markdown(f"### {item.get('id', '')} — {item.get('norma', '')}")
                 st.caption(
-                    f"Entidad: {item.get('entidad', 'N/D')} | "
-                    f"Ciudad de referencia: {perfil['ciudad']} | "
-                    f"Nivel de impacto: **{item.get('impacto', 'Medio')}**"
+                    f"**Entidad:** {item.get('entidad', 'N/D')} | "
+                    f"**Impacto:** {item.get('impacto', 'Medio')}"
                 )
-                st.write(item.get("resumen_aplicacion", ""))
-                st.markdown(f"**Acción recomendada:** {item.get('accion_recomendada', '')}")
+                st.markdown("**Obligaciones para la empresa:**")
+                st.write(item.get("obligaciones", item.get("resumen_aplicacion", "")))
+                st.markdown("**Qué debe hacer la empresa:**")
+                st.write(item.get("que_hacer", item.get("accion_recomendada", "")))
 
     with tab2:
-        ciudad_limpia = perfil["ciudad"].strip()
-        if ciudad_limpia.lower() in {"bogota", "bogota d.c", "bogota d.c.", "bogotá d.c", "bogota dc"}:
-            ciudad_limpia = "Bogotá, D.C."
-        elif ciudad_limpia.lower() == "medellin":
-            ciudad_limpia = "Medellín"
-
-        riesgos_lista = [
-            r.strip().capitalize()
-            for r in re.split(r"[,;/\n]+", perfil.get("riesgos", ""))
-            if r.strip()
-        ]
-
-        st.subheader("Ficha Estructurada de la Empresa")
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"**Empresa:** {perfil['nombre_empresa']}")
-        c1.markdown(f"**Sector:** {perfil['sector']}")
-        c2.markdown(f"**Tamaño:** {perfil['tamano']}")
-        c2.markdown(f"**Colaboradores:** {perfil['empleados']}")
-        c3.markdown(f"**Ubicación:** {ciudad_limpia}, Colombia")
-
-        st.markdown("**Actividad y operación declarada:**")
-        st.info(perfil["actividad"])
-
-        st.markdown("**Focos o riesgos prioritarios:**")
-        if riesgos_lista:
-            st.write(" • ".join(f"`{r}`" for r in riesgos_lista))
-        else:
-            st.write("No se especificaron riesgos adicionales.")
-
-        with st.expander("Ver datos técnicos (JSON)"):
-            st.json(
-                {
-                    "empresa": perfil["nombre_empresa"],
-                    "sector": perfil["sector"],
-                    "tamano": perfil["tamano"],
-                    "empleados": perfil["empleados"],
-                    "ciudad": ciudad_limpia,
-                    "actividad": perfil["actividad"],
-                    "riesgos": riesgos_lista,
-                }
-            )
+        st.subheader("Información de la Empresa")
+        st.markdown(f"**Nombre:** {perfil['nombre_empresa']}")
+        st.markdown(f"**Sector:** {perfil['sector']}")
+        st.markdown(f"**Tamaño:** {perfil['tamano']}")
+        st.markdown(f"**Número de empleados:** {perfil['empleados']}")
+        st.markdown(f"**Ciudad:** {perfil['ciudad']}")
+        st.markdown(f"**Actividad:** {perfil['actividad']}")
+        st.markdown(f"**Riesgos o temas clave:** {perfil['riesgos']}")
