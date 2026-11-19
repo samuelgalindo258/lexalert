@@ -112,7 +112,6 @@ def llamar_gemini_con_reintentos(api_key: str, prompt: str, intentos: int = 3) -
         api_key=api_key,
         http_options=types.HttpOptions(
             timeout=25,
-            transport="rest",
         ),
     )
     ultimo_error = None
