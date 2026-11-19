@@ -152,7 +152,7 @@ def llamar_gemini(api_key: str, perfil: dict) -> dict:
     prompt = construir_prompt_novedad(perfil)
 
     ultimo_error = None
-    for intento in range(3):
+    for intento in range(5):
         try:
             resp = client.models.generate_content(
                 model="gemini-3.8-flash",
@@ -173,7 +173,7 @@ def llamar_gemini(api_key: str, perfil: dict) -> dict:
             msg = str(exc)
             if "404" in msg or "API_KEY_INVALID" in msg or "API key not valid" in msg:
                 break
-            time.sleep(1.5 * (intento + 1))
+            time.sleep(2.5 * (intento + 1))
 
     raise RuntimeError(str(ultimo_error))
 
@@ -301,4 +301,44 @@ if analizar:
                 st.markdown(f"**Acción recomendada:** {item.get('accion_recomendada', '')}")
 
     with tab2:
-        st.json(perfil)
+        ciudad_limpia = perfil["ciudad"].strip()
+        if ciudad_limpia.lower() in {"bogota", "bogota d.c", "bogota d.c.", "bogotá d.c", "bogota dc"}:
+            ciudad_limpia = "Bogotá, D.C."
+        elif ciudad_limpia.lower() == "medellin":
+            ciudad_limpia = "Medellín"
+
+        riesgos_lista = [
+            r.strip().capitalize()
+            for r in re.split(r"[,;/\n]+", perfil.get("riesgos", ""))
+            if r.strip()
+        ]
+
+        st.subheader("Ficha Estructurada de la Empresa")
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(f"**Empresa:** {perfil['nombre_empresa']}")
+        c1.markdown(f"**Sector:** {perfil['sector']}")
+        c2.markdown(f"**Tamaño:** {perfil['tamano']}")
+        c2.markdown(f"**Colaboradores:** {perfil['empleados']}")
+        c3.markdown(f"**Ubicación:** {ciudad_limpia}, Colombia")
+
+        st.markdown("**Actividad y operación declarada:**")
+        st.info(perfil["actividad"])
+
+        st.markdown("**Focos o riesgos prioritarios:**")
+        if riesgos_lista:
+            st.write(" • ".join(f"`{r}`" for r in riesgos_lista))
+        else:
+            st.write("No se especificaron riesgos adicionales.")
+
+        with st.expander("Ver datos técnicos (JSON)"):
+            st.json(
+                {
+                    "empresa": perfil["nombre_empresa"],
+                    "sector": perfil["sector"],
+                    "tamano": perfil["tamano"],
+                    "empleados": perfil["empleados"],
+                    "ciudad": ciudad_limpia,
+                    "actividad": perfil["actividad"],
+                    "riesgos": riesgos_lista,
+                }
+            )
