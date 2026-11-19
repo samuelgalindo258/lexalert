@@ -118,7 +118,7 @@ def llamar_gemini_con_reintentos(api_key: str, prompt: str, intentos: int = 3) -
     for intento in range(1, intentos + 1):
         try:
             res_gemini = client_gemini.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.8-flash",
                 contents=prompt,
             )
             if res_gemini and res_gemini.text:
